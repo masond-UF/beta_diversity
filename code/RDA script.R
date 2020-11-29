@@ -1,7 +1,12 @@
 # 26 November 2020, David Mason—Final project ####
 library(tidyverse)
 library(vegan)
-install.packages("betapart")
+library(ade4)
+library(packfor)
+library(spdep)
+library(betapart)
+install.packages('ape')
+
 spec <- read.csv("data/species.csv")
 str(spec)
 summary(spec)
@@ -11,7 +16,8 @@ spec <- spec[, colSums(spec != 0) > 0] # drop columns without observtions
 env <- read.csv("data/env.csv")
 str(env)
 summary(env)
-env <- env[,-c(1,4,16,17,18)] # drop site, julian date, and texture proportions
+spatial <- env[,2:3] # extract spatial variables for later analysis
+env <- env[,-c(1:4,16,17,18)] # drop site, date, spatial and texture proportions
 env <- env[, colSums(env != 0) > 0] # drop columns without values
 # Select species ####
 source("code/biostats.r") # attach the code from biostats
@@ -52,6 +58,29 @@ red_spe.rda <- rda(red_spe.hel ~ TEXTURE + OWNERSHIP + CANOPY + Quercus.alba +
 									 	MG + PH + GRASS + ROCK, env)
 red_spe.rda
 # 32% of the variance?
+# Create the PCNM variables ####
+# normalize and center the coordinate data around (0,0)
+spatial <- as.data.frame(scale(spatial, center=TRUE, scale=FALSE))
+# create distance matrix
+coord_dist <- dist(spatial) 
+# create PCNM object
+pcnm_obj <- pcnm(coord_dist)
+# extract variables
+pcnm_vec <- pcnm_obj$vectors
+# visualize PCNM variables
+plot(spatial, pch=15, cex=pcnm_vec[,3]*8+4) 
+# extract threshold used to create PCNM. The
+# distance matrix is truncated by this threshold,
+# after which distances are filled with arbitrary high values
+dmin <- pcnm_obj$thresh
+# extract the number of positive EV
+posEV <- length(pcnm_obj$values)
+# extract PCNM variables with positive spatial autocorrelation
+pcnm_obj
+
+select <- which(pcnm_obj$Moran_I$Positive==TRUE) 
+pcnm3=pcnm2[,select]
+
 # Variance partitioning ####
 red_spe.part <- varpart(red_spe.hel, ~TEXTURE+MG+PH+ROCK, 
 												~CANOPY+Quercus.alba+Pinus.taeda,
@@ -65,3 +94,6 @@ plot(red_spe.part,
 		 id.size = 1, bg = 2:5)
 
 # Plot the variance paritioning
+
+# Run anova on fractions ####
+# Explore environmental changes between periods ####
