@@ -5,13 +5,12 @@ library(ade4)
 library(packfor)
 library(spdep)
 library(betapart)
-install.packages('ape')
+library(spdep)
 
 spec <- read.csv("data/species.csv")
 str(spec)
 summary(spec)
 spec <- spec[, colSums(spec != 0) > 0] # drop columns without observtions
-
 
 env <- read.csv("data/env.csv")
 str(env)
@@ -52,12 +51,6 @@ scope=formula(spe.rda), R2scope = F, direction="forward", pstep=1000)
 red_spe.rda <- rda(red_spe.hel ~ ., env)
 red_step.forward <- ordiR2step(rda(red_spe.hel ~ 1, data=env), 
 scope=formula(red_spe.rda), R2scope = F, direction="forward", pstep=1000)
-# Conduct RDA on most parsimonious model ####
-red_spe.rda <- rda(red_spe.hel ~ TEXTURE + OWNERSHIP + CANOPY + Quercus.alba + 
-									 	DECID + DEVOP + Pinus.taeda + PERIOD + CROP + WATER.150 + 
-									 	MG + PH + GRASS + ROCK, env)
-red_spe.rda
-# 32% of the variance?
 # Create the PCNM variables ####
 # normalize and center the coordinate data around (0,0)
 spatial <- as.data.frame(scale(spatial, center=TRUE, scale=FALSE))
@@ -73,20 +66,28 @@ plot(spatial, pch=15, cex=pcnm_vec[,3]*8+4)
 # distance matrix is truncated by this threshold,
 # after which distances are filled with arbitrary high values
 dmin <- pcnm_obj$thresh
-# extract the number of positive EV
-posEV <- length(pcnm_obj$values)
-# extract PCNM variables with positive spatial autocorrelation
-pcnm_obj
+# which eigenvalues show positive spatial autoc
+length(which(pcnm_obj$values>0.0000001))
+# the eigen values for all the axis are positive?
+# I am stuck here trying to check on this****
 
-select <- which(pcnm_obj$Moran_I$Positive==TRUE) 
-pcnm3=pcnm2[,select]
+# Add the spatial component onto the env matrix
+env <- cbind(env, pcnm_vec)
 
 # Variance partitioning ####
 red_spe.part <- varpart(red_spe.hel, ~TEXTURE+MG+PH+ROCK, 
 												~CANOPY+Quercus.alba+Pinus.taeda,
 												~DECID+DEVOP+CROP+WATER.150+GRASS+OWNERSHIP,
-												~PERIOD+X+Y,
-												data = env)
+												~PERIOD + PCNM1 + PCNM2 + PCNM3 + 
+												 PCNM4 + PCNM5 + PCNM6 + PCNM7 +
+												 PCNM8 + PCNM9 + PCNM10 + PCNM11 +
+												 PCNM12 + PCNM13 + PCNM14 + 
+												 PCNM15 + PCNM16 + PCNM17 + 
+												 PCNM18 + PCNM19 + PCNM20 +
+												 PCNM21 + PCNM22 + PCNM23 +
+												 PCNM24 + PCNM25 + PCNM26 +
+												 PCNM27 + PCNM28 + PCNM29 +
+												 PCNM30 + PCNM31, data = env)
 plot(red_spe.part,
 		 digits = 2,
 		 Xnames = c('Soil & ground', 'Overstory', 
@@ -94,6 +95,45 @@ plot(red_spe.part,
 		 id.size = 1, bg = 2:5)
 
 # Plot the variance paritioning
-
 # Run anova on fractions ####
-# Explore environmental changes between periods ####
+rda.all <- rda(red_spe.hel ~ TEXTURE + MG + PH + ROCK +
+					 CANOPY + Quercus.alba + Pinus.taeda + DECID + 
+					 DEVOP + CROP + WATER.150 + GRASS + OWNERSHIP +
+					 PERIOD + PCNM1 + PCNM2 + PCNM3 + 
+					 PCNM4 + PCNM5 + PCNM6 + PCNM7 +
+					 PCNM8 + PCNM9 + PCNM10 + PCNM11 +
+					 PCNM12 + PCNM13 + PCNM14 + 
+					 PCNM15 + PCNM16 + PCNM17 + 
+					 PCNM18 + PCNM19 + PCNM20 +
+					 PCNM21 + PCNM22 + PCNM23 +
+					 PCNM24 + PCNM25 + PCNM26 +
+					 PCNM27 + PCNM28 + PCNM29 +
+					 PCNM30 + PCNM31, data = env)
+anova(rda.all)
+
+rda.soil.ground <- rda(red_spe.hel ~ TEXTURE + 
+											 	MG + PH + ROCK, data = env)
+anova(rda.soil.ground)
+
+rda.overstory <- rda(red_spe.hel ~ CANOPY + Quercus.alba + 
+					 					Pinus.taeda, data = env)
+anova(rda.overstory)
+
+rda.landscape <- rda(red_spe.hel ~ DECID + DEVOP + CROP + 
+								WATER.150 + GRASS + OWNERSHIP, data = env)
+anova(rda.landscape)
+
+rda.space.time <- rda(red_spe.hel ~ 
+					 PERIOD + PCNM1 + PCNM2 + PCNM3 + 
+					 PCNM4 + PCNM5 + PCNM6 + PCNM7 +
+					 PCNM8 + PCNM9 + PCNM10 + PCNM11 +
+					 PCNM12 + PCNM13 + PCNM14 + 
+					 PCNM15 + PCNM16 + PCNM17 + 
+					 PCNM18 + PCNM19 + PCNM20 +
+					 PCNM21 + PCNM22 + PCNM23 +
+					 PCNM24 + PCNM25 + PCNM26 +
+					 PCNM27 + PCNM28 + PCNM29 +
+					 PCNM30 + PCNM31, data = env)
+anova(rda.space.time)
+
+
