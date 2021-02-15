@@ -1,4 +1,5 @@
-# 26 November 2020, David Mason—Final project ####
+# start 26 November 2020 / update 13 February 2021,
+# David Mason—Beta diversity analysis ####
 library(tidyverse)
 library(vegan)
 library(ade4)
@@ -6,6 +7,9 @@ library(packfor)
 library(spdep)
 library(betapart)
 library(spdep)
+library(corrplot)
+
+options(scipen = 999)
 
 spec <- read.csv("data/species.csv")
 str(spec)
@@ -18,6 +22,7 @@ summary(env)
 spatial <- env[,2:3] # extract spatial variables for later analysis
 env <- env[,-c(1:4,16,17,18)] # drop site, date, spatial and texture proportions
 env <- env[, colSums(env != 0) > 0] # drop columns without values
+
 # Select species ####
 source("code/biostats.r") # attach the code from biostats
 
@@ -41,6 +46,139 @@ env_numeric <- as.data.frame(scale(env_numeric))
 env <- cbind(env_factors, env_numeric)
 # rearrange the data so types (e.g., soil, landscape, overstory) are grouped
 env <- select(env, PERIOD, OWNERSHIP, DISTURB, INTENSITY, TEXTURE, everything())
+# convert intensity into ordinal 
+env$INTENSITY <- factor(env$INTENSITY, order = TRUE, 
+                       levels = c("NONE", "LOW", "MED", "HIGH"))
+
+# Check for collinearity ####
+# Correlations among continuous variables
+env.cont.corr <- env %>% 
+	select() %>% 
+	cor(method = c("kendall"))
+corrplot(env.cont.corr, tl.cex = 0.5)
+
+env.cont.corr.df <- as.data.frame(as.table(env.cont.corr))
+env.cont.corr.filt <- env.cont.corr.df %>%  
+											arrange(desc(Freq)) %>% 
+											filter(Freq>0.7)
+
+corr.env.cont.drop.list <- c("Morus.rubra", "Cercis.canadensis", "Ilex.decidua",
+														 "S", "Asimina.triloba", "Carya.pallida")
+
+# Correlations among categorical and continuous variables
+
+# DIST
+env.nominal.corr <- env %>% 
+	select(-PERIOD, -TEXTURE, -OWNERSHIP, -INTENSITY) %>% 
+	select(DISTURB, everything())
+
+DIST <- env.nominal.corr[,1]
+env.nominal.corr <- env.nominal.corr[,-1]
+rsq <- vector()
+pseudo.r <- vector()
+for(i in 1:84){
+	mod <- lm(formula = env.nominal.corr[,i] ~ DIST, 
+					data = env.nominal.corr)
+	rsq <- summary(mod)$r.squared
+	pseudo.r[i] <- sqrt(rsq)
+}
+
+pseudo.r <- as.data.frame(as.table(pseudo.r)) 
+pseudo.r$Var1 <- as.vector(dimnames(env.nominal.corr)[[2]]) 
+# No variables correlated with disturbance type (DIST) > 0.7
+
+# PERIOD
+env.nominal.corr <- env %>% 
+	select(-DISTURB, -TEXTURE, -OWNERSHIP, -INTENSITY) %>% 
+	select(PERIOD, everything())
+
+PERIOD <- env.nominal.corr[,1]
+env.nominal.corr <- env.nominal.corr[,-1]
+rsq <- vector()
+pseudo.r <- vector()
+for(i in 1:84){
+	mod <- lm(formula = env.nominal.corr[,i] ~ PERIOD, 
+					data = env.nominal.corr)
+	rsq <-  summary(mod)$r.squared
+	pseudo.r[i] <- sqrt(rsq)
+}
+
+pseudo.r <- as.data.frame(as.table(pseudo.r)) 
+pseudo.r$Var1 <- as.vector(dimnames(env.nominal.corr)[[2]]) 
+# soilNA correlated with sampling period >0.7
+
+# TEXTURE
+env.nominal.corr <- env %>% 
+	select(-PERIOD, -DISTURB, -OWNERSHIP, -INTENSITY) %>% 
+	select(TEXTURE, everything())
+
+TEXTURE <- env.nominal.corr[,1]
+env.nominal.corr <- env.nominal.corr[,-1]
+rsq <- vector()
+pseudo.r <- vector()
+for(i in 1:84){
+	mod <- lm(formula = env.nominal.corr[,i] ~ TEXTURE, 
+					data = env.nominal.corr)
+	rsq <-  summary(mod)$r.squared
+	pseudo.r[i] <- sqrt(rsq)
+}
+
+pseudo.r <- as.data.frame(as.table(pseudo.r)) 
+pseudo.r$Var1 <- as.vector(dimnames(env.nominal.corr)[[2]]) 
+# Quercus.pagoda correlated with soil texture >0.7
+
+# OWNERSHIP
+env.nominal.corr <- env %>% 
+	select(-PERIOD, -DISTURB, -TEXTURE, -INTENSITY) %>% 
+	select(OWNERSHIP, everything())
+
+OWNERSHIP <- env.nominal.corr[,1]
+env.nominal.corr <- env.nominal.corr[,-1]
+rsq <- vector()
+pseudo.r <- vector()
+for(i in 1:84){
+	mod <- lm(formula = env.nominal.corr[,i] ~ OWNERSHIP, 
+					data = env.nominal.corr)
+	rsq <-  summary(mod)$r.squared
+	pseudo.r[i] <- sqrt(rsq)
+}
+
+pseudo.r <- as.data.frame(as.table(pseudo.r)) 
+pseudo.r$Var1 <- as.vector(dimnames(env.nominal.corr)[[2]]) 
+# DEVHI correlated with land ownership  >0.7
+
+# INTENSITY
+env.ordinal.corr <- env %>% 
+	select(-PERIOD, -DISTURB, -TEXTURE, -OWNERSHIP) %>% 
+	select(INTENSITY, everything())
+
+INTENSITY <- env.ordinal.corr[,1]
+env.ordinal.corr <- env.ordinal.corr[,-1]
+rsq <- vector()
+pseudo.r <- vector()
+for(i in 1:84){
+	mod <- lm(formula = env.ordinal.corr[,i] ~ INTENSITY, 
+					data = env.ordinal.corr)
+	rsq <-  summary(mod)$r.squared
+	pseudo.r[i] <- sqrt(rsq)
+}
+
+pseudo.r <- as.data.frame(as.table(pseudo.r)) 
+pseudo.r$Var1 <- as.vector(dimnames(env.nominal.corr)[[2]]) # nothing
+# No variables correlated with disturbance intensity >0.7
+
+# List of species correlated with categorical variables
+corr.env.cat.drop.list <- c("soilNA", "Quercus.pagoda", "DEVHI")
+
+# Combined list of correlated variables to drop
+corr.env.comb.drop.list <- c(corr.env.cont.drop.list, corr.env.cat.drop.list)
+# Drop the correlated variables
+'%!in%' <- function(x,y){ 
+	!('%in%'(x,y)) # make a function to do the opposite of %in%
+}
+
+env <- env[which(names(env) %!in% corr.env.comb.drop.list)]																
+
 # Variable selection ####
 # Full species matrix = 13% explained
 spe.rda <- rda(spe.hel ~ ., env)
