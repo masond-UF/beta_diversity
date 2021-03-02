@@ -4,10 +4,18 @@ library(tidyverse)
 library(vegan)
 library(ade4)
 library(packfor)
+library(adespatial)
 library(spdep)
 library(betapart)
 library(spdep)
 library(corrplot)
+library(SoDA) # We can convert the original lat/long to cartesian coords
+
+source("plot.links.R") 
+source("sr.value.R")
+source("quickMEM.R")
+source("scalog.R")
+
 
 options(scipen = 999)
 
@@ -16,7 +24,7 @@ str(spec)
 summary(spec)
 spec <- spec[, colSums(spec != 0) > 0] # drop columns without observtions
 
-env <- read.csv("data/env.csv")
+env <- read.csv("data/env_coords.csv")
 str(env)
 summary(env)
 spatial <- env[,2:3] # extract spatial variables for later analysis
@@ -34,7 +42,7 @@ red_spec <- spec[,-c(rare,common)]
 
 # Transform data ####
 spe.hel <- decostand(spec, "hellinger") 
-red_spe.hel <- decostand(red_spec, "hellinger")
+red.spe.hel <- decostand(red_spec, "hellinger")
 
 # separate the categorical and ordinal data
 env_factors <- select(env, PERIOD, TEXTURE, OWNERSHIP, DISTURB, INTENSITY)
@@ -190,27 +198,59 @@ red_spe.rda <- rda(red_spe.hel ~ ., env)
 red_step.forward <- ordiR2step(rda(red_spe.hel ~ 1, data=env), 
 scope=formula(red_spe.rda), R2scope = F, direction="forward", pstep=1000)
 # Create the PCNM variables ####
+# Convert the UTM coordinates to cartesian coordinates
+spatial.xy <- as.data.frame(geoXY(spatial$east_x, spatial$north_y))
 
-# normalize and center the coordinate data around (0,0)
-spatial <- as.data.frame(scale(spatial, center=TRUE, scale=FALSE))
+## Step 1. Construct the matrix of dbMEM variables 
+dbmem.tmp <- dbmem(spatial.xy, silent = FALSE) 
+dbmem <- as.data.frame(dbmem.tmp)
 
-# create distance matrix
-coord_dist <- dist(spatial) 
+# Truncation distance used above = 1,680,903
+(thr <- give.thresh(dist(spatial.xy)))
 
-# create PCNM object
-pcnm_obj <- pcnm(coord_dist)
+# Display and count the eigenvalues
+attributes(dbmem.tmp)$values 
+length(attributes(dbmem.tmp)$values) # 15 eigenvalues
 
-# extract variables
-pcnm_vec <- pcnm_obj$vectors
+## Step 2. Run the global dbMEM analysis on the detrended 
+## Hellinger-transformed species data
+red.spe.hel.det <- resid(lm(as.matrix(red.spe.hel) ~ ., data = spatial.xy))
+dbmem.rda <- rda(red.spe.hel.det ~., dbmem)
 
-# visualize PCNM variables
-plot(spatial, pch=15, cex=pcnm_vec[,3]*8+4) 
+# Step 3. Since the R-square is significant, compute the adjusted
+## R2 and run a forward selection of the dbmem variables 
+R2a <- RsquareAdj(dbmem.rda)$adj.r.squared
+dbmem.fwd <- forward.sel(red.spe.hel.det, 
+												 as.matrix(dbmem),adjR2thresh = R2a)
+nb.sig.dbmem <- nrow(dbmem.fwd) # 4 signif. dbMEM 
 
-# extract threshold used to create PCNM
-dmin <- pcnm_obj$thresh
+# Identity of the significant dbMEM in increasing order
+dbmem.sign <- sort(dbmem.fwd[ ,2])
+# Write the significant dbMEM to a new object 
+dbmem.red <- dbmem[ ,c(dbmem.sign)]
 
-# which eigenvalues show positive spatial autoc
-length(which(pcnm_obj$values>0.0000001))
+## Step 4. New dbMEM analysis with 4 significant dbMEM variables
+## Adjusted R-square after forward selection: R2adj = 0.02787572
+dbmem.rda.2 <- rda(red.spe.hel.det ~ ., data = dbmem.red)
+fwd.R2a <- RsquareAdj(dbmem.rda.2)$adj.r.squared
+anova(dbmem.rda.2)
+
+axes.test <- anova(dbmem.rda.2, by = "axis")
+# Number of significant axes
+nb.ax <- length(which(axes.test[ , ncol(axes.test)] <= 0.05))
+
+## Step 5. Plot the significant canonical axes
+dbmem.rda.2.axes <- scores(dbmem.rda.2, choices = c(1:nb.ax), 
+									 	display = "lc", scaling = 1) 
+
+par(mfrow = c(1,nb.ax))
+
+for(i in 1:nb.ax){
+		sr.value(spatial.xy, dbmem.rda.2.axes[ ,i],
+		sub = paste("RDA",i), csub = 2)
+}
+
+# stopped here on page 321
 
 # Add the spatial component onto the env matrix
 env <- cbind(env, pcnm_vec)
